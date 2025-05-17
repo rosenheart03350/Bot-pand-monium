@@ -37,6 +37,22 @@ function saveData() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(userData, null, 2));
 }
 
+// 🚨 Fonction pour envoyer le message de confirmation aux admins
+function sendAdminConfirmation(userId) {
+  const adminCh = client.channels.cache.find(ch => ch.name === '⛧confirmation-offi⛧');
+  if (!adminCh) return;
+
+  const btn = new ButtonBuilder()
+    .setCustomId(`confirmer_${userId}`)
+    .setLabel('✅ Confirmer')
+    .setStyle(ButtonStyle.Success);
+
+  adminCh.send({
+    content: `⚠️ <@${userId}> a validé sa quête.`,
+    components: [new ActionRowBuilder().addComponents(btn)]
+  }).catch(console.error);
+}
+
 // 🛠 Définition des slash commands
 const commands = [
   new SlashCommandBuilder().setName('quete').setDescription('Obtiens ta quête actuelle'),
@@ -100,16 +116,16 @@ client.on('interactionCreate', async interaction => {
     // ── /quete ──
     if (commandName === 'quete') {
       if (player.validated) {
-        return interaction.reply({ content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !', ephemeral: true });
+        return interaction.reply({ content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !', flags: 64 });
       }
       const embed = new EmbedBuilder()
         .setColor(0xf1c40f)
         .setTitle(`🎯 Quête ${player.progress + 1}`)
-    .setDescription(
-  player.progress === 0
-    ? `🩸 Offrande I : Sacrifie 3000 pièces d'or au Trésor Infernus pour apaiser la soif du Tribunal Démoniaque.`
-    : `🔥 Offrande II : Livre 5000 pièces d'or au Cœur de l’Abîme pour sceller ton pacte avec les puissances occultes.`
-)
+        .setDescription(
+          player.progress === 0
+            ? `🩸 Offrande I : Verse 3000 pièces d'or dans la Gueule du Néant pour calmer la colère de l’Archi-Démon Valgorth.`
+            : `🔥 Offrande II : Scelle un pacte avec les Seigneurs de l’Abîme en livrant 5000 pièces d'or au Cœur du Chaos.`
+        )
         .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
 
       const button = new ButtonBuilder()
@@ -124,23 +140,13 @@ client.on('interactionCreate', async interaction => {
     // ── /valider ──
     if (commandName === 'valider') {
       if (player.validated) {
-        return interaction.reply({ content: '⏳ Tu as déjà validé ta quête.', ephemeral: true });
+        return interaction.reply({ content: '⏳ Tu as déjà validé ta quête.', flags: 64 });
       }
       player.validated = true;
       saveData();
       await interaction.reply('✅ Tu as validé ta quête ! Les admins vont confirmer sous peu.');
 
-      const adminCh = client.channels.cache.find(ch => ch.name === '⛧confirmation-offi⛧');
-      if (adminCh) {
-        const confirmBtn = new ButtonBuilder()
-          .setCustomId(`confirmer_${user.id}`)
-          .setLabel('✅ Confirmer')
-          .setStyle(ButtonStyle.Success);
-        adminCh.send({
-          content: `⚠️ <@${user.id}> a validé la quête ${player.progress + 1}.`,
-          components: [new ActionRowBuilder().addComponents(confirmBtn)]
-        });
-      }
+      sendAdminConfirmation(user.id);
       return;
     }
 
@@ -150,34 +156,31 @@ client.on('interactionCreate', async interaction => {
 
       if (action === 'valider') {
         if (interaction.user.id !== ownerId) {
-          return interaction.reply({ content: `❌ Seul <@${ownerId}> peut valider cette quête.`, ephemeral: true });
+          return interaction.reply({ content: `❌ Seul <@${ownerId}> peut valider cette quête.`, flags: 64 });
         }
         const p = userData[ownerId];
         if (p.validated) {
-          return interaction.reply({ content: '⏳ Quête déjà validée.', ephemeral: true });
+          return interaction.reply({ content: '⏳ Quête déjà validée.', flags: 64 });
         }
         p.validated = true;
         saveData();
-        await interaction.update({ content: '✅ Ta quête est validée !', components: [] });
-
-        const adminCh = client.channels.cache.find(ch => ch.name === '⛧confirmation-offi⛧');
-        if (adminCh) {
-          const btn = new ButtonBuilder()
-            .setCustomId(`confirmer_${ownerId}`)
-            .setLabel('✅ Confirmer')
-            .setStyle(ButtonStyle.Success);
-          adminCh.send({ content: `⚠️ <@${ownerId}> a validé sa quête.`, components: [new ActionRowBuilder().addComponents(btn)] });
+        try {
+          await interaction.update({ content: '✅ Ta quête est validée !', components: [] });
+        } catch (err) {
+          console.error('Erreur lors de la mise à jour de l’interaction bouton valider:', err);
         }
+
+        sendAdminConfirmation(ownerId);
         return;
       }
 
       if (action === 'confirmer') {
         if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-          return interaction.reply({ content: '❌ Tu n’as pas la permission.', ephemeral: true });
+          return interaction.reply({ content: '❌ Tu n’as pas la permission.', flags: 64 });
         }
         const td = userData[ownerId];
         if (!td.validated) {
-          return interaction.reply({ content: `❌ <@${ownerId}> n’a pas validé sa quête.`, ephemeral: true });
+          return interaction.reply({ content: `❌ <@${ownerId}> n’a pas validé sa quête.`, flags: 64 });
         }
         const gain = td.progress === 0 ? 100 : 250;
         td.xp += gain;
@@ -210,7 +213,7 @@ client.on('interactionCreate', async interaction => {
 
     if (commandName === 'reini') {
       if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({ content: '❌ Permission refusée.', ephemeral: true });
+        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
       }
       for (const id of Object.keys(userData)) {
         userData[id].validated = false;
@@ -242,7 +245,7 @@ client.on('interactionCreate', async interaction => {
 
     if (commandName === 'donxp') {
       if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({ content: '❌ Permission refusée.', ephemeral: true });
+        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
       }
       const tgt = interaction.options.getUser('joueur');
       const xpAmt = interaction.options.getInteger('xp');
@@ -251,12 +254,14 @@ client.on('interactionCreate', async interaction => {
       }
       userData[tgt.id].xp += xpAmt;
       saveData();
-      return interaction.reply({ content: `✅ ${xpAmt} XP donnés à <@${tgt.id}> !`, ephemeral: true });
-}
-} catch (err) {
-console.error(err);
-return interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
-}
+      return interaction.reply({ content: `✅ ${xpAmt} XP donnés à <@${tgt.id}> !`, flags: 64 });
+    }
+  } catch (err) {
+    console.error(err);
+    try {
+      await interaction.reply({ content: '❌ Une erreur est survenue.', flags: 64 });
+    } catch { /* si interaction déjà répondu ou expirée */ }
+  }
 });
 
 client.login(process.env.TOKEN);
