@@ -1,16 +1,6 @@
 require('./keepalive.js'); // 👈 ajoute cette ligne en premier
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
 
-console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
-
-client.login(process.env.TOKEN);
-
-// Le reste de tes imports pour Discord
 const fs = require('fs');
 const path = require('path');
 const {
@@ -26,6 +16,8 @@ const {
   PermissionsBitField
 } = require('discord.js');
 
+console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -33,6 +25,8 @@ const client = new Client({
     GatewayIntentBits.MessageContent
   ]
 });
+
+client.login(process.env.TOKEN);
 
 const DATA_FILE = path.join(__dirname, 'data.json');
 
