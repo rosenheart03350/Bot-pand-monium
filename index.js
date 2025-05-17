@@ -1,3 +1,4 @@
+require('./keepalive.js'); // 👈 ajoute cette ligne en premier
 require('dotenv').config();
 
 // Le reste de tes imports pour Discord
