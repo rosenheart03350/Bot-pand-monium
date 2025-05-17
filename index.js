@@ -1,5 +1,4 @@
 require('dotenv').config();
-require('./keep_alive.js');  // Démarre le serveur HTTP keep-alive
 
 // Le reste de tes imports pour Discord
 const fs = require('fs');
@@ -253,11 +252,11 @@ client.on('interactionCreate', async interaction => {
       userData[tgt.id].xp += xpAmt;
       saveData();
       return interaction.reply({ content: `✅ ${xpAmt} XP donnés à <@${tgt.id}> !`, ephemeral: true });
-    }
-  } catch (err) {
-    console.error(err);
-    return interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
-  }
+}
+} catch (err) {
+console.error(err);
+return interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
+}
 });
 
 client.login(process.env.TOKEN);
