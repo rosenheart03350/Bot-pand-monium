@@ -1,8 +1,12 @@
 require('./keepalive.js'); // 👈 ajoute cette ligne en premier
 require('dotenv').config();
+const { Client, GatewayIntentBits } = require('discord.js');
+
 console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
 
-// ton code ici...
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
 
 client.login(process.env.TOKEN);
 
