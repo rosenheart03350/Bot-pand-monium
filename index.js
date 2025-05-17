@@ -105,11 +105,11 @@ client.on('interactionCreate', async interaction => {
       const embed = new EmbedBuilder()
         .setColor(0xf1c40f)
         .setTitle(`🎯 Quête ${player.progress + 1}`)
-        .setDescription(
-          player.progress === 0
-            ? '🩸 Offrande I : Sacrifie 3000 pièces d'or au Trésor Infernus pour apaiser la soif du Tribunal Démoniaque.'
-            : '🔥 Offrande II : Livre 5000 pièces d'or au Cœur de l’Abîme pour sceller ton pacte avec les puissances occultes.'
-        )
+    .setDescription(
+  player.progress === 0
+    ? `🩸 Offrande I : Sacrifie 3000 pièces d'or au Trésor Infernus pour apaiser la soif du Tribunal Démoniaque.`
+    : `🔥 Offrande II : Livre 5000 pièces d'or au Cœur de l’Abîme pour sceller ton pacte avec les puissances occultes.`
+)
         .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
 
       const button = new ButtonBuilder()
