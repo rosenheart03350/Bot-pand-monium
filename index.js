@@ -107,8 +107,8 @@ client.on('interactionCreate', async interaction => {
         .setTitle(`🎯 Quête ${player.progress + 1}`)
         .setDescription(
           player.progress === 0
-            ? '💰 Objectif : Déposer **3000 PO** dans la banque de guilde.'
-            : '💰 Objectif : Déposer **5000 PO** dans la banque de guilde.'
+            ? '🩸 Offrande I : Sacrifie 3000 pièces d'or au Trésor Infernus pour apaiser la soif du Tribunal Démoniaque.'
+            : '🔥 Offrande II : Livre 5000 pièces d'or au Cœur de l’Abîme pour sceller ton pacte avec les puissances occultes.'
         )
         .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
 
