@@ -1,5 +1,10 @@
 require('./keepalive.js'); // 👈 ajoute cette ligne en premier
 require('dotenv').config();
+console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
+
+// ton code ici...
+
+client.login(process.env.TOKEN);
 
 // Le reste de tes imports pour Discord
 const fs = require('fs');
