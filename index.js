@@ -130,7 +130,7 @@ client.on('interactionCreate', async interaction => {
       saveData();
       await interaction.reply('✅ Tu as validé ta quête ! Les admins vont confirmer sous peu.');
 
-      const adminCh = client.channels.cache.find(ch => ch.name === 'admin-quêtes');
+      const adminCh = client.channels.cache.find(ch => ch.name === '⛧confirmation-offi⛧');
       if (adminCh) {
         const confirmBtn = new ButtonBuilder()
           .setCustomId(`confirmer_${user.id}`)
@@ -160,7 +160,7 @@ client.on('interactionCreate', async interaction => {
         saveData();
         await interaction.update({ content: '✅ Ta quête est validée !', components: [] });
 
-        const adminCh = client.channels.cache.find(ch => ch.name === 'admin-quêtes');
+        const adminCh = client.channels.cache.find(ch => ch.name === '⛧confirmation-offi⛧');
         if (adminCh) {
           const btn = new ButtonBuilder()
             .setCustomId(`confirmer_${ownerId}`)
