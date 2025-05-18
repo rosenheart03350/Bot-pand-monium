@@ -1,8 +1,6 @@
 require('./keepalive.js'); // 👈 ajoute cette ligne en premier
 require('dotenv').config();
 
-const fs = require('fs');
-const path = require('path');
 const {
   Client,
   GatewayIntentBits,
@@ -16,7 +14,6 @@ const {
   PermissionsBitField
 } = require('discord.js');
 
-// Import Google Sheets functions
 const { lirePlage, ecrirePlage } = require('./sheets.js');
 
 console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
@@ -29,48 +26,112 @@ const client = new Client({
   ]
 });
 
-const DATA_FILE = path.join(__dirname, 'data.json');
+// --------------------------------------------
+// Gestion des données utilisateurs dans Google Sheets
+// --------------------------------------------
 
-// 📂 Initialisation du fichier data.json
-if (!fs.existsSync(DATA_FILE)) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify({}));
-}
-let userData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+let userData = {};
 
-// 📂 Fonction de sauvegarde robuste
-function saveData() {
+// Chargement des données utilisateurs au démarrage
+async function chargerUserData() {
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(userData, null, 2));
-  } catch (err) {
-    console.error('❌ Erreur lors de la sauvegarde des données :', err);
+    const rows = await lirePlage('Bot-Rosen!A2:E');
+    if (rows && rows.length) {
+      for (const row of rows) {
+        const [id, xp, level, progress, validated] = row;
+        userData[id] = {
+          xp: parseInt(xp) || 0,
+          level: parseInt(level) || 1,
+          progress: parseInt(progress) || 0,
+          validated: validated === 'true'
+        };
+      }
+    }
+  } catch (e) {
+    console.error('❌ Erreur chargement userData depuis Sheets', e);
   }
 }
 
-// 📂 Sauvegarde automatique toutes les 30 secondes
-setInterval(saveData, 30_000);
+// Fonction pour sauvegarder un utilisateur dans Google Sheets
+async function saveUserData(userId, data) {
+  try {
+    let rows = await lirePlage('Bot-Rosen!A2:A');
+    let rowIndex = -1;
+    if (rows) {
+      rowIndex = rows.findIndex(r => r[0] === userId);
+    }
 
-client.login(process.env.TOKEN);
+    const values = [[
+      data.xp.toString(),
+      data.level.toString(),
+      data.progress.toString(),
+      data.validated.toString()
+    ]];
 
-client.once('ready', () => {
+    if (rowIndex === -1) {
+      const lastRow = rows ? rows.length + 1 : 1;
+      const range = `Bot-Rosen!A${lastRow + 1}:E${lastRow + 1}`;
+      await ecrirePlage(range, [[userId, ...values[0]]]);
+    } else {
+      const range = `Bot-Rosen!B${rowIndex + 2}:E${rowIndex + 2}`;
+      await ecrirePlage(range, values);
+    }
+
+    userData[userId] = data;
+  } catch (error) {
+    console.error('❌ Erreur sauvegarde userData', error);
+  }
+}
+
+// --------------------------------------------
+// Client Discord
+// --------------------------------------------
+
+client.once('ready', async () => {
   console.log(`Connecté en tant que ${client.user.tag}`);
 
-  // Test Google Sheets après la connexion
-  (async () => {
-    try {
-      // Écrire une ligne test dans ta feuille Google Sheets
-      await ecrirePlage('Bot-Rosen!A2:C2', [['TestUser', 'XP: 100', 'Niveau: 2']]);
-      console.log("✅ Écriture réussie dans Google Sheets !");
+  await chargerUserData();
 
-      // Lire la plage test pour vérifier
-      const data = await lirePlage('Bot-Rosen!A2:C2');
-      console.log("📄 Données lues dans Google Sheets :", data);
-    } catch (error) {
-      console.error("❌ Erreur lors du test Google Sheets :", error);
-    }
-  })();
+  // Test Google Sheets après la connexion
+  try {
+    await ecrirePlage('Bot-Rosen!A2:C2', [['TestUser', 'XP: 100', 'Niveau: 2']]);
+    console.log("✅ Écriture réussie dans Google Sheets !");
+    const data = await lirePlage('Bot-Rosen!A2:C2');
+    console.log("📄 Données lues dans Google Sheets :", data);
+  } catch (error) {
+    console.error("❌ Erreur lors du test Google Sheets :", error);
+  }
+
+  // Enregistrement des commandes slash
+  const commands = [
+    new SlashCommandBuilder().setName('quete').setDescription('Obtiens ta quête actuelle'),
+    new SlashCommandBuilder().setName('valider').setDescription('Tu valides avoir fait ta quête'),
+    new SlashCommandBuilder()
+      .setName('confirmer')
+      .setDescription('Un admin confirme la quête d’un joueur')
+      .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur à confirmer').setRequired(true)),
+    new SlashCommandBuilder().setName('reini').setDescription('Réinitialise toutes les quêtes'),
+    new SlashCommandBuilder().setName('profil').setDescription('Affiche ton profil RPG'),
+    new SlashCommandBuilder()
+      .setName('donxp')
+      .setDescription('Donne de l\'XP à un joueur')
+      .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur qui reçoit l\'XP').setRequired(true))
+      .addIntegerOption(opt => opt.setName('xp').setDescription('Le nombre d\'XP à donner').setRequired(true)),
+    new SlashCommandBuilder()
+      .setName('gg')
+      .setDescription('Envoie un gros GG qui clignote !')
+  ].map(cmd => cmd.toJSON());
+
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+  await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+  console.log('✅ Commandes enregistrées');
 });
 
-// 🚨 Fonction pour envoyer le message de confirmation aux admins
+// --------------------------------------------
+// Fonctions utilitaires
+// --------------------------------------------
+
 function sendAdminConfirmation(userId) {
   const adminCh = client.channels.cache.find(ch => ch.name === '⛧confirmation-offi⛧');
   if (!adminCh) return;
@@ -86,33 +147,9 @@ function sendAdminConfirmation(userId) {
   }).catch(console.error);
 }
 
-// 🛠 Définition des slash commands
-const commands = [
-  new SlashCommandBuilder().setName('quete').setDescription('Obtiens ta quête actuelle'),
-  new SlashCommandBuilder().setName('valider').setDescription('Tu valides avoir fait ta quête'),
-  new SlashCommandBuilder()
-    .setName('confirmer')
-    .setDescription('Un admin confirme la quête d’un joueur')
-    .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur à confirmer').setRequired(true)),
-  new SlashCommandBuilder().setName('reini').setDescription('Réinitialise toutes les quêtes'),
-  new SlashCommandBuilder().setName('profil').setDescription('Affiche ton profil RPG'),
-  new SlashCommandBuilder()
-    .setName('donxp')
-    .setDescription('Donne de l\'XP à un joueur')
-    .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur qui reçoit l\'XP').setRequired(true))
-    .addIntegerOption(opt => opt.setName('xp').setDescription('Le nombre d\'XP à donner').setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('gg')
-    .setDescription('Envoie un gros GG qui clignote !')
-].map(cmd => cmd.toJSON());
-
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-
-client.once('ready', async () => {
-  console.log(`✅ Connecté en tant que ${client.user.tag}`);
-  await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-  console.log('✅ Commandes enregistrées');
-});
+// --------------------------------------------
+// Gestion des interactions Discord
+// --------------------------------------------
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand() && !interaction.isButton()) return;
@@ -121,7 +158,7 @@ client.on('interactionCreate', async interaction => {
 
   if (!userData[user.id]) {
     userData[user.id] = { xp: 0, level: 1, progress: 0, validated: false };
-    saveData();
+    await saveUserData(user.id, userData[user.id]);
   }
   const player = userData[user.id];
 
@@ -129,9 +166,7 @@ client.on('interactionCreate', async interaction => {
     if (commandName === 'gg') {
       let visible = true;
       let count = 0;
-
       const message = await interaction.reply({ content: '**🎉 GG 🎉**', fetchReply: true });
-
       const interval = setInterval(() => {
         if (count >= 6) {
           clearInterval(interval);
@@ -183,9 +218,8 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: '⏳ Tu as déjà validé ta quête.', flags: 64 });
       }
       player.validated = true;
-      saveData();
+      await saveUserData(user.id, player);
       await interaction.reply('✅ Tu as validé ta quête ! Les admins vont confirmer sous peu.');
-
       sendAdminConfirmation(user.id);
       return;
     }
@@ -202,13 +236,12 @@ client.on('interactionCreate', async interaction => {
           return interaction.reply({ content: '⏳ Quête déjà validée.', flags: 64 });
         }
         p.validated = true;
-        saveData();
+        await saveUserData(ownerId, p);
         try {
           await interaction.update({ content: '✅ Ta quête est validée !', components: [] });
         } catch (err) {
           console.error('Erreur lors de la mise à jour de l’interaction bouton valider:', err);
         }
-
         sendAdminConfirmation(ownerId);
         return;
       }
@@ -226,7 +259,7 @@ client.on('interactionCreate', async interaction => {
         td.validated = false;
         td.progress++;
         while (td.xp >= td.level * 1000) td.level++;
-        saveData();
+        await saveUserData(ownerId, td);
 
         await interaction.reply(`✅ Quête de <@${ownerId}> confirmée ! +${gain} XP`);
         try {
@@ -257,30 +290,30 @@ client.on('interactionCreate', async interaction => {
       for (const id of Object.keys(userData)) {
         userData[id].validated = false;
         userData[id].progress = 0;
+        await saveUserData(id, userData[id]);
       }
-      saveData();
       return interaction.reply('🔄 Toutes les quêtes ont été réinitialisées !');
     }
 
-if (commandName === 'profil') {
-  const e = new EmbedBuilder()
-    .setColor(0x3498db)
-    .setTitle(`📜 Profil de ${user.username}`)
-    .addFields(
-      { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
-      { name: '💠 XP', value: `${player.xp} XP`, inline: true },
-      {
-        name: '📌 Progression',
-        value:
-          player.progress >= 2
-            ? '✅ Toutes les quêtes complétées'
-            : player.progress === 1
-            ? '🔓 Quête 2 dispo'
-            : '🔓 Quête 1 dispo'
-      }
-    );
-  return interaction.reply({ embeds: [e] });
-}
+    if (commandName === 'profil') {
+      const e = new EmbedBuilder()
+        .setColor(0x3498db)
+        .setTitle(`📜 Profil de ${user.username}`)
+        .addFields(
+          { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
+          { name: '💠 XP', value: `${player.xp} XP`, inline: true },
+          {
+            name: '📌 Progression',
+            value:
+              player.progress >= 2
+                ? '✅ Toutes les quêtes complétées'
+                : player.progress === 1
+                ? '🔓 Quête 2 dispo'
+                : '🔓 Quête 1 dispo'
+          }
+        );
+      return interaction.reply({ embeds: [e] });
+    }
 
     if (commandName === 'donxp') {
       if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -292,7 +325,7 @@ if (commandName === 'profil') {
         userData[tgt.id] = { xp: 0, level: 1, progress: 0, validated: false };
       }
       userData[tgt.id].xp += xpAmt;
-      saveData();
+      await saveUserData(tgt.id, userData[tgt.id]);
       return interaction.reply({ content: `✅ ${xpAmt} XP donnés à <@${tgt.id}> !`, flags: 64 });
     }
   } catch (err) {
