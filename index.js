@@ -58,11 +58,11 @@ client.once('ready', () => {
   (async () => {
     try {
       // Écrire une ligne test dans ta feuille Google Sheets
-      await ecrirePlage('Feuille1!A2:C2', [['TestUser', 'XP: 100', 'Niveau: 2']]);
+      await ecrirePlage('Bot-Rosen!A2:C2', [['TestUser', 'XP: 100', 'Niveau: 2']]);
       console.log("✅ Écriture réussie dans Google Sheets !");
 
       // Lire la plage test pour vérifier
-      const data = await lirePlage('Feuille1!A2:C2');
+      const data = await lirePlage('Bot-Rosen!A2:C2');
       console.log("📄 Données lues dans Google Sheets :", data);
     } catch (error) {
       console.error("❌ Erreur lors du test Google Sheets :", error);
