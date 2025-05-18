@@ -1,14 +1,14 @@
 {
-  "name": "bot-pand-monium",
+  "name": "bot-rosen",
   "version": "1.0.0",
+  "description": "Discord bot avec sauvegarde Google Sheets",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "tmi.js": "^1.8.5",
-    "dotenv": "^16.0.0",
-    "discord.js": "^14.7.1",
-    "express": "^4.18.4"
+    "discord.js": "^14.0.3",
+    "googleapis": "^115.0.0",
+    "dotenv": "^16.0.3"
   }
 }
