@@ -29,8 +29,6 @@ const client = new Client({
   ]
 });
 
-client.login(process.env.TOKEN);
-
 const DATA_FILE = path.join(__dirname, 'data.json');
 
 // 📂 Initialisation du fichier data.json
@@ -50,6 +48,27 @@ function saveData() {
 
 // 📂 Sauvegarde automatique toutes les 30 secondes
 setInterval(saveData, 30_000);
+
+client.login(process.env.TOKEN);
+
+client.once('ready', () => {
+  console.log(`Connecté en tant que ${client.user.tag}`);
+
+  // Test Google Sheets après la connexion
+  (async () => {
+    try {
+      // Écrire une ligne test dans ta feuille Google Sheets
+      await ecrirePlage('Feuille1!A2:C2', [['TestUser', 'XP: 100', 'Niveau: 2']]);
+      console.log("✅ Écriture réussie dans Google Sheets !");
+
+      // Lire la plage test pour vérifier
+      const data = await lirePlage('Feuille1!A2:C2');
+      console.log("📄 Données lues dans Google Sheets :", data);
+    } catch (error) {
+      console.error("❌ Erreur lors du test Google Sheets :", error);
+    }
+  })();
+});
 
 // 🚨 Fonction pour envoyer le message de confirmation aux admins
 function sendAdminConfirmation(userId) {
