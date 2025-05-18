@@ -12,8 +12,8 @@ const auth = new google.auth.GoogleAuth({
 // Création du client sheets
 const sheets = google.sheets({ version: 'v4', auth });
 
-// ID de ta feuille Google Sheets (à remplacer par ton propre ID)
-const SPREADSHEET_ID = 'ton_id_de_feuille_ici';
+// ID de ta feuille Google Sheets
+const SPREADSHEET_ID = '1uhbvp22XeLIo11mRmnLBgsinlQECXb9GkJ9YbgZbYck';
 
 // Exemple : Fonction pour lire une plage de cellules
 async function lirePlage(range) {
