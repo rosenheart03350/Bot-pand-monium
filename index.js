@@ -240,25 +240,25 @@ client.on('interactionCreate', async interaction => {
       return interaction.reply('🔄 Toutes les quêtes ont été réinitialisées !');
     }
 
-    if (commandName === 'profil') {
-      const e = new EmbedBuilder()
-        .setColor(0x3498db)
-        .setTitle(`📜 Profil de ${user.username}`)
-        .addFields(
-          { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
-          { name: '💠 XP', value: `${player.xp} XP`, inline: true },
-          {
-            name: '📌 Progression',
-            value:
-              player.progress === 0
-                ? '🔓 Quête 1 dispo'
-                : player.progress === 1
-                ? '🔓 Quête 2 dispo'
-                : '✅ Toutes les quêtes complétées'
-          }
-        );
-      return interaction.reply({ embeds: [e] });
-    }
+if (commandName === 'profil') {
+  const e = new EmbedBuilder()
+    .setColor(0x3498db)
+    .setTitle(`📜 Profil de ${user.username}`)
+    .addFields(
+      { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
+      { name: '💠 XP', value: `${player.xp} XP`, inline: true },
+      {
+        name: '📌 Progression',
+        value:
+          player.progress >= 2
+            ? '✅ Toutes les quêtes complétées'
+            : player.progress === 1
+            ? '🔓 Quête 2 dispo'
+            : '🔓 Quête 1 dispo'
+      }
+    );
+  return interaction.reply({ embeds: [e] });
+}
 
     if (commandName === 'donxp') {
       if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
