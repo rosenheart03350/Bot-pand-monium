@@ -16,6 +16,9 @@ const {
   PermissionsBitField
 } = require('discord.js');
 
+// Import Google Sheets functions
+const { lirePlage, ecrirePlage } = require('./sheets.js');
+
 console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
 
 const client = new Client({
