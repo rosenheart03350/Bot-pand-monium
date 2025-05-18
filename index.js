@@ -117,29 +117,42 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-    // ── /quete ──
-    if (commandName === 'quete') {
-      if (player.validated) {
-        return interaction.reply({ content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !', flags: 64 });
-      }
-      const embed = new EmbedBuilder()
-        .setColor(0xf1c40f)
-        .setTitle(`🎯 Quête ${player.progress + 1}`)
-        .setDescription(
-          player.progress === 0
-            ? `🩸 Offrande I : Verse 3000 pièces d'or dans la Gueule du Néant pour calmer la colère de l’Archi-Démon Valgorth.`
-            : `🔥 Offrande II : Scelle un pacte avec les Seigneurs de l’Abîme en livrant 5000 pièces d'or au Cœur du Chaos.`
-        )
-        .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
+// ── /quete ──
+if (commandName === 'quete') {
+  // ✅ Nouveau : si toutes les quêtes sont faites
+  if (player.progress >= 2) {
+    return interaction.reply({
+      content: '🛑 Tu as déjà fait toutes tes offrandes. Reviens plus tard !',
+      flags: 64
+    });
+  }
 
-      const button = new ButtonBuilder()
-        .setCustomId(`valider_${user.id}`)
-        .setLabel('✅ Valider')
-        .setStyle(ButtonStyle.Success);
+  if (player.validated) {
+    return interaction.reply({
+      content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !',
+      flags: 64
+    });
+  }
 
-      const row = new ActionRowBuilder().addComponents(button);
-      return interaction.reply({ embeds: [embed], components: [row] });
-    }
+  const embed = new EmbedBuilder()
+    .setColor(0xf1c40f)
+    .setTitle(`🎯 Quête ${player.progress + 1}`)
+    .setDescription(
+      player.progress === 0
+        ? `🩸 Offrande I : Verse 3000 pièces d'or dans la Gueule du Néant pour calmer la colère de l’Archi-Démon Valgorth.`
+        : `🔥 Offrande II : Scelle un pacte avec les Seigneurs de l’Abîme en livrant 5000 pièces d'or au Cœur du Chaos.`
+    )
+    .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
+
+  const button = new ButtonBuilder()
+    .setCustomId(`valider_${user.id}`)
+    .setLabel('✅ Valider')
+    .setStyle(ButtonStyle.Success);
+
+  const row = new ActionRowBuilder().addComponents(button);
+  return interaction.reply({ embeds: [embed], components: [row] });
+}
+
 
     // ── /valider ──
     if (commandName === 'valider') {
