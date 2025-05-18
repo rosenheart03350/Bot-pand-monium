@@ -36,10 +36,17 @@ if (!fs.existsSync(DATA_FILE)) {
 }
 let userData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
-// 💾 Fonction de sauvegarde
+// 📂 Fonction de sauvegarde robuste
 function saveData() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(userData, null, 2));
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(userData, null, 2));
+  } catch (err) {
+    console.error('❌ Erreur lors de la sauvegarde des données :', err);
+  }
 }
+
+// 📂 Sauvegarde automatique toutes les 30 secondes
+setInterval(saveData, 30_000);
 
 // 🚨 Fonction pour envoyer le message de confirmation aux admins
 function sendAdminConfirmation(userId) {
@@ -90,7 +97,6 @@ client.on('interactionCreate', async interaction => {
 
   const { commandName, user, member } = interaction;
 
-  // 🔄 Initialisation de l'utilisateur
   if (!userData[user.id]) {
     userData[user.id] = { xp: 0, level: 1, progress: 0, validated: false };
     saveData();
@@ -98,7 +104,6 @@ client.on('interactionCreate', async interaction => {
   const player = userData[user.id];
 
   try {
-    // ── /gg ──
     if (commandName === 'gg') {
       let visible = true;
       let count = 0;
@@ -117,44 +122,40 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-// ── /quete ──
-if (commandName === 'quete') {
-  // ✅ Nouveau : si toutes les quêtes sont faites
-  if (player.progress >= 2) {
-    return interaction.reply({
-      content: '🛑 Tu as déjà fait toutes tes offrandes. Reviens plus tard !',
-      flags: 64
-    });
-  }
+    if (commandName === 'quete') {
+      if (player.progress >= 2) {
+        return interaction.reply({
+          content: '🛑 Tu as déjà fait toutes tes offrandes. Reviens plus tard !',
+          flags: 64
+        });
+      }
 
-  if (player.validated) {
-    return interaction.reply({
-      content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !',
-      flags: 64
-    });
-  }
+      if (player.validated) {
+        return interaction.reply({
+          content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !',
+          flags: 64
+        });
+      }
 
-  const embed = new EmbedBuilder()
-    .setColor(0xf1c40f)
-    .setTitle(`🎯 Quête ${player.progress + 1}`)
-    .setDescription(
-      player.progress === 0
-        ? `🩸 Offrande I : Verse 3000 pièces d'or dans la Gueule du Néant pour calmer la colère de l’Archi-Démon Valgorth.`
-        : `🔥 Offrande II : Scelle un pacte avec les Seigneurs de l’Abîme en livrant 5000 pièces d'or au Cœur du Chaos.`
-    )
-    .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
+      const embed = new EmbedBuilder()
+        .setColor(0xf1c40f)
+        .setTitle(`🎯 Quête ${player.progress + 1}`)
+        .setDescription(
+          player.progress === 0
+            ? `🩸 Offrande I : Verse 3000 pièces d'or dans la Gueule du Néant pour calmer la colère de l’Archi-Démon Valgorth.`
+            : `🔥 Offrande II : Scelle un pacte avec les Seigneurs de l’Abîme en livrant 5000 pièces d'or au Cœur du Chaos.`
+        )
+        .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
 
-  const button = new ButtonBuilder()
-    .setCustomId(`valider_${user.id}`)
-    .setLabel('✅ Valider')
-    .setStyle(ButtonStyle.Success);
+      const button = new ButtonBuilder()
+        .setCustomId(`valider_${user.id}`)
+        .setLabel('✅ Valider')
+        .setStyle(ButtonStyle.Success);
 
-  const row = new ActionRowBuilder().addComponents(button);
-  return interaction.reply({ embeds: [embed], components: [row] });
-}
+      const row = new ActionRowBuilder().addComponents(button);
+      return interaction.reply({ embeds: [embed], components: [row] });
+    }
 
-
-    // ── /valider ──
     if (commandName === 'valider') {
       if (player.validated) {
         return interaction.reply({ content: '⏳ Tu as déjà validé ta quête.', flags: 64 });
@@ -167,7 +168,6 @@ if (commandName === 'quete') {
       return;
     }
 
-    // ── Gestion des boutons ──
     if (interaction.isButton()) {
       const [action, ownerId] = interaction.customId.split('_');
 
@@ -223,7 +223,7 @@ if (commandName === 'quete') {
               ]
             })
           );
-        } catch { /* ignore */ }
+        } catch {}
         return;
       }
     }
@@ -277,7 +277,7 @@ if (commandName === 'quete') {
     console.error(err);
     try {
       await interaction.reply({ content: '❌ Une erreur est survenue.', flags: 64 });
-    } catch { /* si interaction déjà répondu ou expirée */ }
+    } catch {}
   }
 });
 
