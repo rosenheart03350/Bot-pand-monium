@@ -1,4 +1,4 @@
-require('./keepalive.js'); // 👈 ajoute cette ligne en premier
+require('./keepalive.js');
 require('dotenv').config();
 
 const {
@@ -26,13 +26,8 @@ const client = new Client({
   ]
 });
 
-// --------------------------------------------
-// Gestion des données utilisateurs dans Google Sheets
-// --------------------------------------------
-
 let userData = {};
 
-// Chargement des données utilisateurs au démarrage
 async function chargerUserData() {
   try {
     const rows = await lirePlage('Bot-Rosen!A2:E');
@@ -52,7 +47,6 @@ async function chargerUserData() {
   }
 }
 
-// Fonction pour sauvegarder un utilisateur dans Google Sheets
 async function saveUserData(userId, data) {
   try {
     let rows = await lirePlage('Bot-Rosen!A2:A');
@@ -83,16 +77,11 @@ async function saveUserData(userId, data) {
   }
 }
 
-// --------------------------------------------
-// Client Discord
-// --------------------------------------------
-
 client.once('ready', async () => {
   console.log(`Connecté en tant que ${client.user.tag}`);
 
   await chargerUserData();
 
-  // Test Google Sheets après la connexion
   try {
     await ecrirePlage('Bot-Rosen!A2:C2', [['TestUser', 'XP: 100', 'Niveau: 2']]);
     console.log("✅ Écriture réussie dans Google Sheets !");
@@ -102,7 +91,6 @@ client.once('ready', async () => {
     console.error("❌ Erreur lors du test Google Sheets :", error);
   }
 
-  // Enregistrement des commandes slash
   const commands = [
     new SlashCommandBuilder().setName('quete').setDescription('Obtiens ta quête actuelle'),
     new SlashCommandBuilder().setName('valider').setDescription('Tu valides avoir fait ta quête'),
@@ -123,14 +111,9 @@ client.once('ready', async () => {
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-
   await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
   console.log('✅ Commandes enregistrées');
 });
-
-// --------------------------------------------
-// Fonctions utilitaires
-// --------------------------------------------
 
 function sendAdminConfirmation(userId) {
   const adminCh = client.channels.cache.find(ch => ch.name === '⛧confirmation-offi⛧');
@@ -146,10 +129,6 @@ function sendAdminConfirmation(userId) {
     components: [new ActionRowBuilder().addComponents(btn)]
   }).catch(console.error);
 }
-
-// --------------------------------------------
-// Gestion des interactions Discord
-// --------------------------------------------
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand() && !interaction.isButton()) return;
@@ -181,17 +160,10 @@ client.on('interactionCreate', async interaction => {
 
     if (commandName === 'quete') {
       if (player.progress >= 2) {
-        return interaction.reply({
-          content: '🛑 Tu as déjà fait toutes tes offrandes. Reviens plus tard !',
-          flags: 64
-        });
+        return interaction.reply({ content: '🛑 Tu as déjà fait toutes tes offrandes. Reviens plus tard !', flags: 64 });
       }
-
       if (player.validated) {
-        return interaction.reply({
-          content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !',
-          flags: 64
-        });
+        return interaction.reply({ content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !', flags: 64 });
       }
 
       const embed = new EmbedBuilder()
@@ -199,8 +171,8 @@ client.on('interactionCreate', async interaction => {
         .setTitle(`🎯 Quête ${player.progress + 1}`)
         .setDescription(
           player.progress === 0
-            ? `🩸 Offrande I : Verse 3000 pièces d'or dans la Gueule du Néant pour calmer la colère de l’Archi-Démon Valgorth.`
-            : `🔥 Offrande II : Scelle un pacte avec les Seigneurs de l’Abîme en livrant 5000 pièces d'or au Cœur du Chaos.`
+            ? `🩸 Offrande I : Verse 3000 pièces d'or dans la Gueule du Néant.`
+            : `🔥 Offrande II : Livre 5000 pièces d'or au Cœur du Chaos.`
         )
         .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
 
@@ -214,12 +186,13 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (commandName === 'valider') {
+      await interaction.deferReply({ ephemeral: true });
       if (player.validated) {
-        return interaction.reply({ content: '⏳ Tu as déjà validé ta quête.', flags: 64 });
+        return interaction.editReply('⏳ Tu as déjà validé ta quête.');
       }
       player.validated = true;
       await saveUserData(user.id, player);
-      await interaction.reply('✅ Tu as validé ta quête ! Les admins vont confirmer sous peu.');
+      await interaction.editReply('✅ Tu as validé ta quête ! Les admins vont confirmer sous peu.');
       sendAdminConfirmation(user.id);
       return;
     }
@@ -237,11 +210,7 @@ client.on('interactionCreate', async interaction => {
         }
         p.validated = true;
         await saveUserData(ownerId, p);
-        try {
-          await interaction.update({ content: '✅ Ta quête est validée !', components: [] });
-        } catch (err) {
-          console.error('Erreur lors de la mise à jour de l’interaction bouton valider:', err);
-        }
+        await interaction.update({ content: '✅ Ta quête est validée !', components: [] });
         sendAdminConfirmation(ownerId);
         return;
       }
@@ -254,6 +223,7 @@ client.on('interactionCreate', async interaction => {
         if (!td.validated) {
           return interaction.reply({ content: `❌ <@${ownerId}> n’a pas validé sa quête.`, flags: 64 });
         }
+        await interaction.deferReply();
         const gain = td.progress === 0 ? 100 : 250;
         td.xp += gain;
         td.validated = false;
@@ -261,7 +231,7 @@ client.on('interactionCreate', async interaction => {
         while (td.xp >= td.level * 1000) td.level++;
         await saveUserData(ownerId, td);
 
-        await interaction.reply(`✅ Quête de <@${ownerId}> confirmée ! +${gain} XP`);
+        await interaction.editReply(`✅ Quête de <@${ownerId}> confirmée ! +${gain} XP`);
         try {
           await client.users.fetch(ownerId).then(u =>
             u.send({
@@ -287,12 +257,13 @@ client.on('interactionCreate', async interaction => {
       if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
       }
+      await interaction.deferReply();
       for (const id of Object.keys(userData)) {
         userData[id].validated = false;
         userData[id].progress = 0;
         await saveUserData(id, userData[id]);
       }
-      return interaction.reply('🔄 Toutes les quêtes ont été réinitialisées !');
+      return interaction.editReply('🔄 Toutes les quêtes ont été réinitialisées !');
     }
 
     if (commandName === 'profil') {
@@ -319,6 +290,7 @@ client.on('interactionCreate', async interaction => {
       if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
       }
+      await interaction.deferReply();
       const tgt = interaction.options.getUser('joueur');
       const xpAmt = interaction.options.getInteger('xp');
       if (!userData[tgt.id]) {
@@ -326,13 +298,16 @@ client.on('interactionCreate', async interaction => {
       }
       userData[tgt.id].xp += xpAmt;
       await saveUserData(tgt.id, userData[tgt.id]);
-      return interaction.reply({ content: `✅ ${xpAmt} XP donnés à <@${tgt.id}> !`, flags: 64 });
+      return interaction.editReply(`✅ ${xpAmt} XP donnés à <@${tgt.id}> !`);
     }
+
   } catch (err) {
     console.error(err);
-    try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply('❌ Une erreur est survenue.');
+    } else {
       await interaction.reply({ content: '❌ Une erreur est survenue.', flags: 64 });
-    } catch {}
+    }
   }
 });
 
