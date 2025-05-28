@@ -79,7 +79,6 @@ async function saveUserData(userId, data) {
 
 client.once('ready', async () => {
   console.log(`Connecté en tant que ${client.user.tag}`);
-
   await chargerUserData();
 
   try {
@@ -105,9 +104,7 @@ client.once('ready', async () => {
       .setDescription('Donne de l\'XP à un joueur')
       .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur qui reçoit l\'XP').setRequired(true))
       .addIntegerOption(opt => opt.setName('xp').setDescription('Le nombre d\'XP à donner').setRequired(true)),
-    new SlashCommandBuilder()
-      .setName('gg')
-      .setDescription('Envoie un gros GG qui clignote !')
+    new SlashCommandBuilder().setName('gg').setDescription('Envoie un gros GG qui clignote !')
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -132,7 +129,6 @@ function sendAdminConfirmation(userId) {
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand() && !interaction.isButton()) return;
-
   const { commandName, user, member } = interaction;
 
   if (!userData[user.id]) {
@@ -228,8 +224,30 @@ client.on('interactionCreate', async interaction => {
         td.xp += gain;
         td.validated = false;
         td.progress++;
+
+        let oldLevel = td.level;
         while (td.xp >= td.level * 1000) td.level++;
         await saveUserData(ownerId, td);
+
+        if (td.level > oldLevel) {
+          const levelChannel = client.channels.cache.find(c => c.name === '⛧💰requête-tribut💰⛧');
+          if (levelChannel && levelChannel.isTextBased()) {
+            const levelEmbed = new EmbedBuilder()
+              .setColor(0xffd700)
+              .setTitle(`🏅 LEVEL UP !`)
+              .setDescription(`**<@${ownerId}>** est passé au **niveau ${td.level}** !`)
+              .addFields(
+                { name: '🎯 XP Actuel', value: `${td.xp} XP`, inline: true },
+                { name: '🚀 Niveau précédent', value: `${oldLevel}`, inline: true },
+                { name: '📈 Nouveau niveau', value: `${td.level}`, inline: true }
+              )
+              .setThumbnail('https://cdn-icons-png.flaticon.com/512/820/820610.png')
+              .setFooter({ text: 'Continue tes offrandes pour progresser...', iconURL: client.user.displayAvatarURL() })
+              .setTimestamp();
+
+            await levelChannel.send({ embeds: [levelEmbed] });
+          }
+        }
 
         await interaction.editReply(`✅ Quête de <@${ownerId}> confirmée ! +${gain} XP`);
         try {
@@ -312,3 +330,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.TOKEN);
+
