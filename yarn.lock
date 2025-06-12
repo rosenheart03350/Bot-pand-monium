@@ -1,5 +1,0 @@
-rm package-lock.json
-yarn install
-git add yarn.lock
-git commit -am "Ajout du yarn.lock et suppression du package-lock.json"
-git push
