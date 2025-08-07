@@ -113,7 +113,7 @@ client.once('ready', async () => {
 });
 
 function sendAdminConfirmation(userId) {
-  const adminCh = client.channels.cache.find(ch => ch.name === '⛧confirmation-offi⛧');
+  const adminCh = client.channels.cache.find(ch => ch.name === 'admin-quete');
   if (!adminCh) return;
 
   const btn = new ButtonBuilder()
@@ -330,4 +330,3 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.TOKEN);
-
