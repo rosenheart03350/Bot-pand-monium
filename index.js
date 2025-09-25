@@ -11,7 +11,8 @@ const {
   ButtonBuilder,
   ActionRowBuilder,
   ButtonStyle,
-  PermissionsBitField
+  PermissionsBitField,
+  StringSelectMenuBuilder
 } = require('discord.js');
 
 const { lirePlage, ecrirePlage } = require('./sheets.js');
@@ -104,7 +105,8 @@ client.once('ready', async () => {
       .setDescription('Donne de l\'XP à un joueur')
       .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur qui reçoit l\'XP').setRequired(true))
       .addIntegerOption(opt => opt.setName('xp').setDescription('Le nombre d\'XP à donner').setRequired(true)),
-    new SlashCommandBuilder().setName('gg').setDescription('Envoie un gros GG qui clignote !')
+    new SlashCommandBuilder().setName('gg').setDescription('Envoie un gros GG qui clignote !'),
+    new SlashCommandBuilder().setName('metier').setDescription('Choisis ton métier via un menu déroulant')
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -128,7 +130,6 @@ function sendAdminConfirmation(userId) {
 }
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand() && !interaction.isButton()) return;
   const { commandName, user, member } = interaction;
 
   if (!userData[user.id]) {
@@ -138,6 +139,7 @@ client.on('interactionCreate', async interaction => {
   const player = userData[user.id];
 
   try {
+    // ---------------- COMMANDES EXISTANTES ----------------
     if (commandName === 'gg') {
       let visible = true;
       let count = 0;
@@ -193,6 +195,81 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
+    if (commandName === 'reini') {
+      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
+      }
+      await interaction.deferReply();
+      for (const id of Object.keys(userData)) {
+        userData[id].validated = false;
+        userData[id].progress = 0;
+        await saveUserData(id, userData[id]);
+      }
+      return interaction.editReply('🔄 Toutes les quêtes ont été réinitialisées !');
+    }
+
+    if (commandName === 'profil') {
+      const e = new EmbedBuilder()
+        .setColor(0x3498db)
+        .setTitle(`📜 Profil de ${user.username}`)
+        .addFields(
+          { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
+          { name: '💠 XP', value: `${player.xp} XP`, inline: true },
+          {
+            name: '📌 Progression',
+            value:
+              player.progress >= 2
+                ? '✅ Toutes les quêtes complétées'
+                : player.progress === 1
+                ? '🔓 Quête 2 dispo'
+                : '🔓 Quête 1 dispo'
+          }
+        );
+      return interaction.reply({ embeds: [e] });
+    }
+
+    if (commandName === 'donxp') {
+      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
+      }
+      await interaction.deferReply();
+      const tgt = interaction.options.getUser('joueur');
+      const xpAmt = interaction.options.getInteger('xp');
+      if (!userData[tgt.id]) {
+        userData[tgt.id] = { xp: 0, level: 1, progress: 0, validated: false };
+      }
+      userData[tgt.id].xp += xpAmt;
+      await saveUserData(tgt.id, userData[tgt.id]);
+      return interaction.editReply(`✅ ${xpAmt} XP donnés à <@${tgt.id}> !`);
+    }
+
+    // ---------------- NOUVELLE COMMANDE METIER ----------------
+    if (commandName === 'metier') {
+      const row = new ActionRowBuilder()
+        .addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId('choix_metier')
+            .setPlaceholder('Sélectionne ton métier')
+            .addOptions([
+              { label: 'Forgeron', value: 'Forgeron', emoji: '⚒️' },
+              { label: 'Mineur', value: 'Mineur', emoji: '⛏️' },
+              { label: 'Alchimiste', value: 'Alchimiste', emoji: '🧪' },
+              { label: 'Couturier', value: 'Couturier', emoji: '🧵' },
+              { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
+              { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
+              { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
+              { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
+            ])
+        );
+
+      await interaction.reply({
+        content: '🔽 Choisis ton métier :',
+        components: [row],
+        ephemeral: true
+      });
+    }
+
+    // ---------------- GESTION DES INTERACTIONS ----------------
     if (interaction.isButton()) {
       const [action, ownerId] = interaction.customId.split('_');
 
@@ -271,52 +348,24 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    if (commandName === 'reini') {
-      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
-      }
-      await interaction.deferReply();
-      for (const id of Object.keys(userData)) {
-        userData[id].validated = false;
-        userData[id].progress = 0;
-        await saveUserData(id, userData[id]);
-      }
-      return interaction.editReply('🔄 Toutes les quêtes ont été réinitialisées !');
-    }
+    // ---------------- GESTION DU MENU SELECT ----------------
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === 'choix_metier') {
+        const metier = interaction.values[0];
+        const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
 
-    if (commandName === 'profil') {
-      const e = new EmbedBuilder()
-        .setColor(0x3498db)
-        .setTitle(`📜 Profil de ${user.username}`)
-        .addFields(
-          { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
-          { name: '💠 XP', value: `${player.xp} XP`, inline: true },
-          {
-            name: '📌 Progression',
-            value:
-              player.progress >= 2
-                ? '✅ Toutes les quêtes complétées'
-                : player.progress === 1
-                ? '🔓 Quête 2 dispo'
-                : '🔓 Quête 1 dispo'
-          }
-        );
-      return interaction.reply({ embeds: [e] });
-    }
+        if (!role) {
+          return interaction.reply({ content: `❌ Le rôle **${metier}** n'existe pas sur ce serveur.`, ephemeral: true });
+        }
 
-    if (commandName === 'donxp') {
-      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
+        try {
+          await interaction.member.roles.add(role);
+          return interaction.reply({ content: `✅ Tu es maintenant **${metier}** !`, ephemeral: true });
+        } catch (err) {
+          console.error('❌ Erreur ajout rôle métier :', err);
+          return interaction.reply({ content: '❌ Impossible d’ajouter le rôle.', ephemeral: true });
+        }
       }
-      await interaction.deferReply();
-      const tgt = interaction.options.getUser('joueur');
-      const xpAmt = interaction.options.getInteger('xp');
-      if (!userData[tgt.id]) {
-        userData[tgt.id] = { xp: 0, level: 1, progress: 0, validated: false };
-      }
-      userData[tgt.id].xp += xpAmt;
-      await saveUserData(tgt.id, userData[tgt.id]);
-      return interaction.editReply(`✅ ${xpAmt} XP donnés à <@${tgt.id}> !`);
     }
 
   } catch (err) {
