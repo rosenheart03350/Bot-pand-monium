@@ -8,11 +8,9 @@ const {
   Routes,
   SlashCommandBuilder,
   EmbedBuilder,
-  ButtonBuilder,
+  StringSelectMenuBuilder,
   ActionRowBuilder,
-  ButtonStyle,
-  PermissionsBitField,
-  StringSelectMenuBuilder
+  PermissionsBitField
 } = require('discord.js');
 
 const { lirePlage, ecrirePlage } = require('./sheets.js');
@@ -29,6 +27,19 @@ const client = new Client({
 
 let userData = {};
 
+// ----- MÉTIERS -----
+const METIERS = [
+  { label: 'Forgeron', value: 'Forgeron', emoji: '⚒️' },
+  { label: 'Mineur', value: 'Mineur', emoji: '⛏️' },
+  { label: 'Alchimiste', value: 'Alchimiste', emoji: '🧪' },
+  { label: 'Couturier', value: 'Couturier', emoji: '🧵' },
+  { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
+  { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
+  { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
+  { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
+];
+
+// ----- FONCTIONS GOOGLE SHEETS -----
 async function chargerUserData() {
   try {
     const rows = await lirePlage('Bot-Rosen!A2:E');
@@ -52,9 +63,7 @@ async function saveUserData(userId, data) {
   try {
     let rows = await lirePlage('Bot-Rosen!A2:A');
     let rowIndex = -1;
-    if (rows) {
-      rowIndex = rows.findIndex(r => r[0] === userId);
-    }
+    if (rows) rowIndex = rows.findIndex(r => r[0] === userId);
 
     const values = [[
       data.xp.toString(),
@@ -73,40 +82,25 @@ async function saveUserData(userId, data) {
     }
 
     userData[userId] = data;
-  } catch (error) {
-    console.error('❌ Erreur sauvegarde userData', error);
+  } catch (err) {
+    console.error('❌ Erreur sauvegarde userData', err);
   }
 }
 
+// ----- BOT READY -----
 client.once('ready', async () => {
   console.log(`Connecté en tant que ${client.user.tag}`);
   await chargerUserData();
 
-  try {
-    await ecrirePlage('Bot-Rosen!A2:C2', [['TestUser', 'XP: 100', 'Niveau: 2']]);
-    console.log("✅ Écriture réussie dans Google Sheets !");
-    const data = await lirePlage('Bot-Rosen!A2:C2');
-    console.log("📄 Données lues dans Google Sheets :", data);
-  } catch (error) {
-    console.error("❌ Erreur lors du test Google Sheets :", error);
-  }
-
+  // Enregistrement des commandes
   const commands = [
-    new SlashCommandBuilder().setName('quete').setDescription('Obtiens ta quête actuelle'),
-    new SlashCommandBuilder().setName('valider').setDescription('Tu valides avoir fait ta quête'),
-    new SlashCommandBuilder()
-      .setName('confirmer')
-      .setDescription('Un admin confirme la quête d’un joueur')
-      .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur à confirmer').setRequired(true)),
-    new SlashCommandBuilder().setName('reini').setDescription('Réinitialise toutes les quêtes'),
-    new SlashCommandBuilder().setName('profil').setDescription('Affiche ton profil RPG'),
-    new SlashCommandBuilder()
-      .setName('donxp')
-      .setDescription('Donne de l\'XP à un joueur')
+    new SlashCommandBuilder().setName('profil').setDescription('Affiche ton profil et métiers'),
+    new SlashCommandBuilder().setName('metier').setDescription('Choisis ton métier via un menu déroulant'),
+    new SlashCommandBuilder().setName('donxp').setDescription('Donne de l\'XP à un joueur')
       .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur qui reçoit l\'XP').setRequired(true))
       .addIntegerOption(opt => opt.setName('xp').setDescription('Le nombre d\'XP à donner').setRequired(true)),
     new SlashCommandBuilder().setName('gg').setDescription('Envoie un gros GG qui clignote !'),
-    new SlashCommandBuilder().setName('metier').setDescription('Choisis ton métier via un menu déroulant')
+    new SlashCommandBuilder().setName('requete').setDescription('Demande de l’aide à un métier')
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -114,21 +108,7 @@ client.once('ready', async () => {
   console.log('✅ Commandes enregistrées');
 });
 
-function sendAdminConfirmation(userId) {
-  const adminCh = client.channels.cache.find(ch => ch.name === 'admin-quete');
-  if (!adminCh) return;
-
-  const btn = new ButtonBuilder()
-    .setCustomId(`confirmer_${userId}`)
-    .setLabel('✅ Confirmer')
-    .setStyle(ButtonStyle.Success);
-
-  adminCh.send({
-    content: `⚠️ <@${userId}> a validé sa quête.`,
-    components: [new ActionRowBuilder().addComponents(btn)]
-  }).catch(console.error);
-}
-
+// ----- INTERACTIONS -----
 client.on('interactionCreate', async interaction => {
   const { commandName, user, member } = interaction;
 
@@ -139,16 +119,13 @@ client.on('interactionCreate', async interaction => {
   const player = userData[user.id];
 
   try {
-    // ---------------- COMMANDES EXISTANTES ----------------
+    // ----- /gg -----
     if (commandName === 'gg') {
       let visible = true;
       let count = 0;
       const message = await interaction.reply({ content: '**🎉 GG 🎉**', fetchReply: true });
       const interval = setInterval(() => {
-        if (count >= 6) {
-          clearInterval(interval);
-          return;
-        }
+        if (count >= 6) return clearInterval(interval);
         visible = !visible;
         message.edit({ content: visible ? '**🎉 GG 🎉**' : '‎ ' });
         count++;
@@ -156,230 +133,90 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-    if (commandName === 'quete') {
-      if (player.progress >= 2) {
-        return interaction.reply({ content: '🛑 Tu as déjà fait toutes tes offrandes. Reviens plus tard !', flags: 64 });
-      }
-      if (player.validated) {
-        return interaction.reply({ content: '⏳ Tu as déjà validé ta quête. Attends la confirmation !', flags: 64 });
-      }
+    // ----- /profil -----
+    if (commandName === 'profil') {
+      const userRoles = member.roles.cache
+        .filter(r => METIERS.some(m => m.value.toLowerCase() === r.name.toLowerCase()))
+        .map(r => r.name);
 
       const embed = new EmbedBuilder()
-        .setColor(0xf1c40f)
-        .setTitle(`🎯 Quête ${player.progress + 1}`)
-        .setDescription(
-          player.progress === 0
-            ? `🩸 Offrande I : Verse 3000 pièces d'or dans la Gueule du Néant.`
-            : `🔥 Offrande II : Livre 5000 pièces d'or au Cœur du Chaos.`
-        )
-        .setFooter({ text: 'Clique sur le bouton ci-dessous pour valider.' });
-
-      const button = new ButtonBuilder()
-        .setCustomId(`valider_${user.id}`)
-        .setLabel('✅ Valider')
-        .setStyle(ButtonStyle.Success);
-
-      const row = new ActionRowBuilder().addComponents(button);
-      return interaction.reply({ embeds: [embed], components: [row] });
-    }
-
-    if (commandName === 'valider') {
-      await interaction.deferReply({ ephemeral: true });
-      if (player.validated) {
-        return interaction.editReply('⏳ Tu as déjà validé ta quête.');
-      }
-      player.validated = true;
-      await saveUserData(user.id, player);
-      await interaction.editReply('✅ Tu as validé ta quête ! Les admins vont confirmer sous peu.');
-      sendAdminConfirmation(user.id);
-      return;
-    }
-
-    if (commandName === 'reini') {
-      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
-      }
-      await interaction.deferReply();
-      for (const id of Object.keys(userData)) {
-        userData[id].validated = false;
-        userData[id].progress = 0;
-        await saveUserData(id, userData[id]);
-      }
-      return interaction.editReply('🔄 Toutes les quêtes ont été réinitialisées !');
-    }
-
-    if (commandName === 'profil') {
-      const e = new EmbedBuilder()
-        .setColor(0x3498db)
         .setTitle(`📜 Profil de ${user.username}`)
+        .setColor(0x3498db)
         .addFields(
           { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
           { name: '💠 XP', value: `${player.xp} XP`, inline: true },
-          {
-            name: '📌 Progression',
-            value:
-              player.progress >= 2
-                ? '✅ Toutes les quêtes complétées'
-                : player.progress === 1
-                ? '🔓 Quête 2 dispo'
-                : '🔓 Quête 1 dispo'
-          }
+          { name: '🎯 Métiers', value: userRoles.length ? userRoles.join(', ') : 'Aucun métier', inline: true }
         );
-      return interaction.reply({ embeds: [e] });
+
+      return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
+    // ----- /metier -----
+    if (commandName === 'metier') {
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('choix_metier')
+          .setPlaceholder('Sélectionne ton métier')
+          .addOptions(METIERS)
+      );
+      return interaction.reply({ content: '🔽 Choisis ton métier :', components: [row], ephemeral: true });
+    }
+
+    // ----- /donxp -----
     if (commandName === 'donxp') {
-      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      if (!member.permissions.has(PermissionsBitField.Flags.Administrator))
         return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
-      }
+
       await interaction.deferReply();
       const tgt = interaction.options.getUser('joueur');
       const xpAmt = interaction.options.getInteger('xp');
-      if (!userData[tgt.id]) {
-        userData[tgt.id] = { xp: 0, level: 1, progress: 0, validated: false };
-      }
+
+      if (!userData[tgt.id]) userData[tgt.id] = { xp: 0, level: 1, progress: 0, validated: false };
       userData[tgt.id].xp += xpAmt;
       await saveUserData(tgt.id, userData[tgt.id]);
+
       return interaction.editReply(`✅ ${xpAmt} XP donnés à <@${tgt.id}> !`);
     }
 
-    // ---------------- NOUVELLE COMMANDE METIER ----------------
-    if (commandName === 'metier') {
-      const row = new ActionRowBuilder()
-        .addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('choix_metier')
-            .setPlaceholder('Sélectionne ton métier')
-            .addOptions([
-              { label: 'Forgeron', value: 'Forgeron', emoji: '⚒️' },
-              { label: 'Mineur', value: 'Mineur', emoji: '⛏️' },
-              { label: 'Alchimiste', value: 'Alchimiste', emoji: '🧪' },
-              { label: 'Couturier', value: 'Couturier', emoji: '🧵' },
-              { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
-              { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
-              { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
-              { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
-            ])
-        );
-
-      await interaction.reply({
-        content: '🔽 Choisis ton métier :',
-        components: [row],
-        ephemeral: true
-      });
+    // ----- /requete -----
+    if (commandName === 'requete') {
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('requete_metier')
+          .setPlaceholder('Sélectionne le métier pour ta requête')
+          .addOptions(METIERS)
+      );
+      return interaction.reply({ content: '🔽 À quel métier veux-tu envoyer ta requête ?', components: [row], ephemeral: true });
     }
 
-    // ---------------- GESTION DU MENU SELECT ----------------
+    // ----- GESTION DES MENUS DÉROULANTS -----
     if (interaction.isStringSelectMenu()) {
+      const metier = interaction.values[0];
+      const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
+      if (!role) return interaction.reply({ content: `❌ Le rôle **${metier}** n'existe pas.`, ephemeral: true });
+
+      // Choix métier
       if (interaction.customId === 'choix_metier') {
-        const metier = interaction.values[0];
-        const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
-
-        if (!role) {
-          return interaction.reply({ content: `❌ Le rôle **${metier}** n'existe pas sur ce serveur.`, ephemeral: true });
-        }
-
         try {
-          // 1️⃣ Ajouter le rôle
           await interaction.member.roles.add(role);
-
-          // 2️⃣ Message public dans #metiers
           const publicChannel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
-          if (publicChannel) {
-            publicChannel.send(`🎉 **${interaction.user.username}** a rejoint la guilde des **${metier}** !`);
-          }
-
-          // 3️⃣ Message privé au membre
-          await interaction.user.send(
-            `✅ Merci d'avoir rejoint la guilde des **${metier}** !\n` +
-            `💡 Pour faire une quête ou envoyer une requête, utilise les commandes du bot comme d'habitude.`
-          );
-
-          // Confirmation éphémère
+          if (publicChannel) publicChannel.send(`🎉 **${interaction.user.username}** a rejoint la guilde des **${metier}** !`);
+          await interaction.user.send(`✅ Merci d'avoir rejoint la guilde des **${metier}** !`);
           return interaction.reply({ content: `✅ Tu es maintenant **${metier}** !`, ephemeral: true });
         } catch (err) {
-          console.error('❌ Erreur ajout rôle métier ou envoi message :', err);
+          console.error(err);
           return interaction.reply({ content: '❌ Impossible d’ajouter le rôle ou d’envoyer le message.', ephemeral: true });
         }
       }
-    }
 
-    // ---------------- GESTION DES BOUTONS EXISTANTS ----------------
-    if (interaction.isButton()) {
-      const [action, ownerId] = interaction.customId.split('_');
-
-      if (action === 'valider') {
-        if (interaction.user.id !== ownerId) {
-          return interaction.reply({ content: `❌ Seul <@${ownerId}> peut valider cette quête.`, flags: 64 });
-        }
-        const p = userData[ownerId];
-        if (p.validated) {
-          return interaction.reply({ content: '⏳ Quête déjà validée.', flags: 64 });
-        }
-        p.validated = true;
-        await saveUserData(ownerId, p);
-        await interaction.update({ content: '✅ Ta quête est validée !', components: [] });
-        sendAdminConfirmation(ownerId);
-        return;
-      }
-
-      if (action === 'confirmer') {
-        if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-          return interaction.reply({ content: '❌ Tu n’as pas la permission.', flags: 64 });
-        }
-        const td = userData[ownerId];
-        if (!td.validated) {
-          return interaction.reply({ content: `❌ <@${ownerId}> n’a pas validé sa quête.`, flags: 64 });
-        }
-        await interaction.deferReply();
-        const gain = td.progress === 0 ? 100 : 250;
-        td.xp += gain;
-        td.validated = false;
-        td.progress++;
-
-        let oldLevel = td.level;
-        while (td.xp >= td.level * 1000) td.level++;
-        await saveUserData(ownerId, td);
-
-        if (td.level > oldLevel) {
-          const levelChannel = client.channels.cache.find(c => c.name === '⛧💰requête-tribut💰⛧');
-          if (levelChannel && levelChannel.isTextBased()) {
-            const levelEmbed = new EmbedBuilder()
-              .setColor(0xffd700)
-              .setTitle(`🏅 LEVEL UP !`)
-              .setDescription(`**<@${ownerId}>** est passé au **niveau ${td.level}** !`)
-              .addFields(
-                { name: '🎯 XP Actuel', value: `${td.xp} XP`, inline: true },
-                { name: '🚀 Niveau précédent', value: `${oldLevel}`, inline: true },
-                { name: '📈 Nouveau niveau', value: `${td.level}`, inline: true }
-              )
-              .setThumbnail('https://cdn-icons-png.flaticon.com/512/820/820610.png')
-              .setFooter({ text: 'Continue tes offrandes pour progresser...', iconURL: client.user.displayAvatarURL() })
-              .setTimestamp();
-
-            await levelChannel.send({ embeds: [levelEmbed] });
-          }
-        }
-
-        await interaction.editReply(`✅ Quête de <@${ownerId}> confirmée ! +${gain} XP`);
-        try {
-          await client.users.fetch(ownerId).then(u =>
-            u.send({
-              embeds: [
-                new EmbedBuilder()
-                  .setColor(0x2ecc71)
-                  .setTitle('🎉 Quête Terminée !')
-                  .setDescription(`Tu as terminé la quête ${td.progress} !`)
-                  .addFields(
-                    { name: '🏆 XP Gagné', value: `+${gain} XP`, inline: true },
-                    { name: '📈 Niveau', value: `Niv ${td.level}`, inline: true },
-                    { name: '⭐ Total XP', value: `${td.xp} XP`, inline: true }
-                  )
-              ]
-            })
-          );
-        } catch {}
-        return;
+      // Requête métier
+      if (interaction.customId === 'requete_metier') {
+        role.members.forEach(m => {
+          m.send(`📢 ${interaction.user.username} a envoyé une requête à la guilde des ${metier} !`);
+        });
+        const publicChannel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
+        if (publicChannel) publicChannel.send(`📢 ${interaction.user.username} a envoyé une requête à la guilde des ${metier} !`);
+        return interaction.reply({ content: `✅ Ta requête a été envoyée à la guilde des ${metier}.`, ephemeral: true });
       }
     }
 
