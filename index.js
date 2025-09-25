@@ -151,11 +151,9 @@ client.on('interactionCreate', async interaction => {
         await interaction.member.roles.add(role);
         if (!player.metiers.includes(metier)) player.metiers.push(metier);
 
-        // Message public
         const publicChannel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
         if (publicChannel) publicChannel.send(`🎉 **${interaction.user.username}** a rejoint la guilde des **${metier}** !`);
 
-        // DM utilisateur
         await interaction.user.send(`✅ Tu as rejoint la guilde des **${metier}** !`);
 
         return interaction.reply({ content: `✅ Tu es maintenant **${metier}** !`, ephemeral: true });
@@ -184,12 +182,17 @@ client.on('interactionCreate', async interaction => {
       const metier = interaction.customId.replace('modal_objet_', '');
       const objet = interaction.fields.getTextInputValue('objet');
 
-      // Embed violet style WoW épique
+      // Embed WoW épique "cool"
       const embed = new EmbedBuilder()
         .setColor(0xa335ee) // violet épique
-        .setTitle(objet)
-        .setDescription(`📢 Requête envoyée par **${interaction.user.username}**\n👷 Métier ciblé : **${metier}**`)
-        .setFooter({ text: 'Un artisan peut répondre à cette demande.' })
+        .setTitle(`🛠 Nouvelle requête pour ${metier} !`)
+        .setDescription(
+          `👤 **Joueur :** ${interaction.user.username}\n` +
+          `⚔ **Objet demandé :** **${objet}**` // objet en gras violet épique
+        )
+        .setThumbnail('https://wow.zamimg.com/images/wow/icons/large/inv_misc_questionmark.jpg')
+        .addFields({ name: '💡 Astuce', value: 'Réponds vite et aide ton compagnon !', inline: false })
+        .setFooter({ text: '🏰 La guilde est toujours à votre écoute' })
         .setTimestamp();
 
       // Envoi dans le canal métiers
@@ -199,9 +202,7 @@ client.on('interactionCreate', async interaction => {
       // MP aux membres du rôle
       const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
       if (role) {
-        role.members.forEach(m => {
-          m.send({ embeds: [embed] }).catch(() => {});
-        });
+        role.members.forEach(m => m.send({ embeds: [embed] }).catch(() => {}));
       }
 
       // Confirmation à l’auteur
