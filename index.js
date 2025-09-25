@@ -12,7 +12,9 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } = require('discord.js');
 
 console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
@@ -182,31 +184,49 @@ client.on('interactionCreate', async interaction => {
       const metier = interaction.customId.replace('modal_objet_', '');
       const objet = interaction.fields.getTextInputValue('objet');
 
-      // Embed WoW épique "cool"
       const embed = new EmbedBuilder()
         .setColor(0xa335ee) // violet épique
         .setTitle(`🛠 Nouvelle requête pour ${metier} !`)
         .setDescription(
           `👤 **Joueur :** ${interaction.user.username}\n` +
-          `⚔ **Objet demandé :** **${objet}**` // objet en gras violet épique
+          `⚔ **Objet demandé :** **${objet}**`
         )
         .setThumbnail('https://wow.zamimg.com/images/wow/icons/large/inv_misc_questionmark.jpg')
         .addFields({ name: '💡 Astuce', value: 'Réponds vite et aide ton compagnon !', inline: false })
         .setFooter({ text: '🏰 La guilde est toujours à votre écoute' })
         .setTimestamp();
 
-      // Envoi dans le canal métiers
-      const channel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
-      if (channel) channel.send({ embeds: [embed] });
+      // Bouton accepter
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`accepter_${metier}_${interaction.user.id}`)
+          .setLabel('✅ Accepter')
+          .setStyle(ButtonStyle.Primary)
+      );
 
-      // MP aux membres du rôle
+      const channel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
+      if (channel) channel.send({ embeds: [embed], components: [row] });
+
+      return interaction.reply({ content: `✅ Ta requête pour **${objet}** a été envoyée aux **${metier}**.`, ephemeral: true });
+    }
+
+    // ---------------- BOUTON ACCEPTER ----------------
+    if (interaction.isButton() && interaction.customId.startsWith('accepter_')) {
+      const [ , metier, requesterId ] = interaction.customId.split('_');
       const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
-      if (role) {
-        role.members.forEach(m => m.send({ embeds: [embed] }).catch(() => {}));
+
+      if (!role || !interaction.member.roles.cache.has(role.id)) {
+        return interaction.reply({ content: '❌ Tu n’as pas le rôle requis pour accepter cette requête.', ephemeral: true });
       }
 
-      // Confirmation à l’auteur
-      return interaction.reply({ content: `✅ Ta requête pour **${objet}** a été envoyée aux **${metier}**.`, ephemeral: true });
+      const requester = await client.users.fetch(requesterId);
+      if (requester) {
+        requester.send(`🛠 **${interaction.user.username}** a accepté ta requête pour **${metier}**, le craft est en cours !`).catch(() => {});
+      }
+
+      interaction.reply({ content: `✅ Tu as accepté la requête de ${requester.username} !`, ephemeral: true });
+      interaction.message.components[0].components[0].setDisabled(true); // désactive le bouton après clic
+      interaction.message.edit({ components: interaction.message.components });
     }
 
   } catch (err) {
