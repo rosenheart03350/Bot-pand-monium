@@ -8,16 +8,12 @@ const {
   Routes,
   SlashCommandBuilder,
   EmbedBuilder,
-  PermissionsBitField,
   StringSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder
 } = require('discord.js');
-
-const fetch = require('node-fetch');
-const cheerio = require('cheerio');
 
 console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
 
@@ -84,13 +80,6 @@ client.once('ready', async () => {
   await chargerUserData();
 
   const commands = [
-    new SlashCommandBuilder().setName('profil').setDescription('Affiche ton profil et tes métiers'),
-    new SlashCommandBuilder()
-      .setName('donxp')
-      .setDescription('Donne de l\'XP à un joueur')
-      .addUserOption(opt => opt.setName('joueur').setDescription('Le joueur qui reçoit l\'XP').setRequired(true))
-      .addIntegerOption(opt => opt.setName('xp').setDescription('Le nombre d\'XP à donner').setRequired(true)),
-    new SlashCommandBuilder().setName('gg').setDescription('Envoie un gros GG qui clignote !'),
     new SlashCommandBuilder().setName('metier').setDescription('Choisis ton métier via un menu déroulant'),
     new SlashCommandBuilder().setName('requete').setDescription('Envoie une requête pour un métier')
   ].map(cmd => cmd.toJSON());
@@ -110,48 +99,6 @@ client.on('interactionCreate', async interaction => {
   const player = userData[user.id];
 
   try {
-    // ---------------- GG ----------------
-    if (commandName === 'gg') {
-      let visible = true;
-      let count = 0;
-      const message = await interaction.reply({ content: '**🎉 GG 🎉**', fetchReply: true });
-      const interval = setInterval(() => {
-        if (count >= 6) { clearInterval(interval); return; }
-        visible = !visible;
-        message.edit({ content: visible ? '**🎉 GG 🎉**' : '‎ ' });
-        count++;
-      }, 500);
-      return;
-    }
-
-    // ---------------- PROFIL ----------------
-    if (commandName === 'profil') {
-      const metiers = player.metiers.length ? player.metiers.join(', ') : 'Aucun';
-      const e = new EmbedBuilder()
-        .setColor(0x3498db)
-        .setTitle(`📜 Profil de ${user.username}`)
-        .addFields(
-          { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
-          { name: '💠 XP', value: `${player.xp} XP`, inline: true },
-          { name: '🛠 Métiers', value: metiers }
-        );
-      return interaction.reply({ embeds: [e] });
-    }
-
-    // ---------------- DON XP ----------------
-    if (commandName === 'donxp') {
-      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
-      }
-      await interaction.deferReply();
-      const tgt = interaction.options.getUser('joueur');
-      const xpAmt = interaction.options.getInteger('xp');
-      if (!userData[tgt.id]) userData[tgt.id] = { xp: 0, level: 1, progress: 0, validated: false, metiers: [] };
-      userData[tgt.id].xp += xpAmt;
-      await saveUserData(tgt.id, userData[tgt.id]);
-      return interaction.editReply(`✅ ${xpAmt} XP donnés à <@${tgt.id}> !`);
-    }
-
     // ---------------- METIER ----------------
     if (commandName === 'metier') {
       const row = new ActionRowBuilder().addComponents(
@@ -234,36 +181,31 @@ client.on('interactionCreate', async interaction => {
 
     // ---------------- MODAL SUBMIT ----------------
     if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_objet_')) {
-      const metier = interaction.customId.split('_')[2];
+      const metier = interaction.customId.replace('modal_objet_', '');
       const objet = interaction.fields.getTextInputValue('objet');
 
-      // Recherche sur Wowhead
-      const searchUrl = `https://www.wowhead.com/search?q=${encodeURIComponent(objet)}`;
-      const res = await fetch(searchUrl);
-      const text = await res.text();
-      const $ = cheerio.load(text);
-
-      const firstItem = $('.listview-cleartext').first();
-      if (!firstItem.length) return interaction.reply({ content: `❌ Objet "${objet}" introuvable sur Wowhead.`, ephemeral: true });
-
-      const itemName = firstItem.text();
-      const itemLink = 'https://www.wowhead.com' + firstItem.attr('href');
-      const iconUrl = firstItem.closest('tr').find('img').attr('src') || 'https://wow.zamimg.com/images/wow/icons/large/inv_misc_questionmark.jpg';
-
+      // Embed violet style WoW épique
       const embed = new EmbedBuilder()
-        .setTitle(`Nouvelle requête !`)
-        .setColor(0x1abc9c)
-        .setDescription(`👤 Joueur : ${interaction.user.username}\n🛠 Métier : ${metier}\n⚔ Objet : [${itemName}](${itemLink})`)
-        .setThumbnail(iconUrl);
+        .setColor(0xa335ee) // violet épique
+        .setTitle(objet)
+        .setDescription(`📢 Requête envoyée par **${interaction.user.username}**\n👷 Métier ciblé : **${metier}**`)
+        .setFooter({ text: 'Un artisan peut répondre à cette demande.' })
+        .setTimestamp();
 
-      // Envoi dans le canal métier
-      const channel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === metier.toLowerCase() && c.isTextBased());
+      // Envoi dans le canal métiers
+      const channel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
       if (channel) channel.send({ embeds: [embed] });
 
-      // DM utilisateur
-      await interaction.user.send({ content: '✅ Ta requête a été envoyée !', embeds: [embed] });
+      // MP aux membres du rôle
+      const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
+      if (role) {
+        role.members.forEach(m => {
+          m.send({ embeds: [embed] }).catch(() => {});
+        });
+      }
 
-      return interaction.reply({ content: '✅ Requête envoyée !', ephemeral: true });
+      // Confirmation à l’auteur
+      return interaction.reply({ content: `✅ Ta requête pour **${objet}** a été envoyée aux **${metier}**.`, ephemeral: true });
     }
 
   } catch (err) {
