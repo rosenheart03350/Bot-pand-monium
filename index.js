@@ -269,7 +269,42 @@ client.on('interactionCreate', async interaction => {
       });
     }
 
-    // ---------------- GESTION DES INTERACTIONS ----------------
+    // ---------------- GESTION DU MENU SELECT ----------------
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === 'choix_metier') {
+        const metier = interaction.values[0];
+        const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
+
+        if (!role) {
+          return interaction.reply({ content: `❌ Le rôle **${metier}** n'existe pas sur ce serveur.`, ephemeral: true });
+        }
+
+        try {
+          // 1️⃣ Ajouter le rôle
+          await interaction.member.roles.add(role);
+
+          // 2️⃣ Message public dans #metiers
+          const publicChannel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
+          if (publicChannel) {
+            publicChannel.send(`🎉 **${interaction.user.username}** a rejoint la guilde des **${metier}** !`);
+          }
+
+          // 3️⃣ Message privé au membre
+          await interaction.user.send(
+            `✅ Merci d'avoir rejoint la guilde des **${metier}** !\n` +
+            `💡 Pour faire une quête ou envoyer une requête, utilise les commandes du bot comme d'habitude.`
+          );
+
+          // Confirmation éphémère
+          return interaction.reply({ content: `✅ Tu es maintenant **${metier}** !`, ephemeral: true });
+        } catch (err) {
+          console.error('❌ Erreur ajout rôle métier ou envoi message :', err);
+          return interaction.reply({ content: '❌ Impossible d’ajouter le rôle ou d’envoyer le message.', ephemeral: true });
+        }
+      }
+    }
+
+    // ---------------- GESTION DES BOUTONS EXISTANTS ----------------
     if (interaction.isButton()) {
       const [action, ownerId] = interaction.customId.split('_');
 
@@ -345,26 +380,6 @@ client.on('interactionCreate', async interaction => {
           );
         } catch {}
         return;
-      }
-    }
-
-    // ---------------- GESTION DU MENU SELECT ----------------
-    if (interaction.isStringSelectMenu()) {
-      if (interaction.customId === 'choix_metier') {
-        const metier = interaction.values[0];
-        const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
-
-        if (!role) {
-          return interaction.reply({ content: `❌ Le rôle **${metier}** n'existe pas sur ce serveur.`, ephemeral: true });
-        }
-
-        try {
-          await interaction.member.roles.add(role);
-          return interaction.reply({ content: `✅ Tu es maintenant **${metier}** !`, ephemeral: true });
-        } catch (err) {
-          console.error('❌ Erreur ajout rôle métier :', err);
-          return interaction.reply({ content: '❌ Impossible d’ajouter le rôle.', ephemeral: true });
-        }
       }
     }
 
