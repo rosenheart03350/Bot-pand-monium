@@ -8,12 +8,16 @@ const {
   Routes,
   SlashCommandBuilder,
   EmbedBuilder,
-  ActionRowBuilder,
+  PermissionsBitField,
   StringSelectMenuBuilder,
-  PermissionsBitField
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder
 } = require('discord.js');
 
-const { lirePlage, ecrirePlage } = require('./sheets.js');
+const fetch = require('node-fetch');
+const cheerio = require('cheerio');
 
 console.log("TOKEN =", process.env.TOKEN ? "[OK]" : "[MISSING]");
 
@@ -29,7 +33,7 @@ let userData = {};
 
 async function chargerUserData() {
   try {
-    const rows = await lirePlage('Bot-Rosen!A2:E');
+    const rows = await require('./sheets.js').lirePlage('Bot-Rosen!A2:E');
     if (rows && rows.length) {
       for (const row of rows) {
         const [id, xp, level, progress, validated] = row;
@@ -37,7 +41,8 @@ async function chargerUserData() {
           xp: parseInt(xp) || 0,
           level: parseInt(level) || 1,
           progress: parseInt(progress) || 0,
-          validated: validated === 'true'
+          validated: validated === 'true',
+          metiers: []
         };
       }
     }
@@ -48,11 +53,10 @@ async function chargerUserData() {
 
 async function saveUserData(userId, data) {
   try {
-    let rows = await lirePlage('Bot-Rosen!A2:A');
+    const ecrirePlage = require('./sheets.js').ecrirePlage;
+    let rows = await require('./sheets.js').lirePlage('Bot-Rosen!A2:A');
     let rowIndex = -1;
-    if (rows) {
-      rowIndex = rows.findIndex(r => r[0] === userId);
-    }
+    if (rows) rowIndex = rows.findIndex(r => r[0] === userId);
 
     const values = [[
       data.xp.toString(),
@@ -69,7 +73,6 @@ async function saveUserData(userId, data) {
       const range = `Bot-Rosen!B${rowIndex + 2}:E${rowIndex + 2}`;
       await ecrirePlage(range, values);
     }
-
     userData[userId] = data;
   } catch (error) {
     console.error('❌ Erreur sauvegarde userData', error);
@@ -81,7 +84,7 @@ client.once('ready', async () => {
   await chargerUserData();
 
   const commands = [
-    new SlashCommandBuilder().setName('profil').setDescription('Affiche ton profil avec tes métiers'),
+    new SlashCommandBuilder().setName('profil').setDescription('Affiche ton profil et tes métiers'),
     new SlashCommandBuilder()
       .setName('donxp')
       .setDescription('Donne de l\'XP à un joueur')
@@ -89,7 +92,7 @@ client.once('ready', async () => {
       .addIntegerOption(opt => opt.setName('xp').setDescription('Le nombre d\'XP à donner').setRequired(true)),
     new SlashCommandBuilder().setName('gg').setDescription('Envoie un gros GG qui clignote !'),
     new SlashCommandBuilder().setName('metier').setDescription('Choisis ton métier via un menu déroulant'),
-    new SlashCommandBuilder().setName('requete').setDescription('Envoie une requête à un métier')
+    new SlashCommandBuilder().setName('requete').setDescription('Envoie une requête pour un métier')
   ].map(cmd => cmd.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -101,23 +104,19 @@ client.on('interactionCreate', async interaction => {
   const { commandName, user, member } = interaction;
 
   if (!userData[user.id]) {
-    userData[user.id] = { xp: 0, level: 1, progress: 0, validated: false };
+    userData[user.id] = { xp: 0, level: 1, progress: 0, validated: false, metiers: [] };
     await saveUserData(user.id, userData[user.id]);
   }
-
   const player = userData[user.id];
 
   try {
-    // ---------------- COMMANDES EXISTANTES ----------------
+    // ---------------- GG ----------------
     if (commandName === 'gg') {
       let visible = true;
       let count = 0;
       const message = await interaction.reply({ content: '**🎉 GG 🎉**', fetchReply: true });
       const interval = setInterval(() => {
-        if (count >= 6) {
-          clearInterval(interval);
-          return;
-        }
+        if (count >= 6) { clearInterval(interval); return; }
         visible = !visible;
         message.edit({ content: visible ? '**🎉 GG 🎉**' : '‎ ' });
         count++;
@@ -125,127 +124,152 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-    if (commandName === 'donxp') {
-      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return interaction.reply({ content: '❌ Permission refusée.', ephemeral: true });
-      }
-      await interaction.deferReply();
-      const tgt = interaction.options.getUser('joueur');
-      const xpAmt = interaction.options.getInteger('xp');
-      if (!userData[tgt.id]) {
-        userData[tgt.id] = { xp: 0, level: 1, progress: 0, validated: false };
-      }
-      userData[tgt.id].xp += xpAmt;
-      await saveUserData(tgt.id, userData[tgt.id]);
-      return interaction.editReply(`✅ ${xpAmt} XP donnés à <@${tgt.id}> !`);
-    }
-
-    // ---------------- COMMANDE PROFIL ----------------
+    // ---------------- PROFIL ----------------
     if (commandName === 'profil') {
-      const roles = member.roles.cache
-        .filter(r => !r.managed && r.name !== '@everyone')
-        .map(r => r.name)
-        .join(', ') || 'Aucun métier';
+      const metiers = player.metiers.length ? player.metiers.join(', ') : 'Aucun';
       const e = new EmbedBuilder()
         .setColor(0x3498db)
         .setTitle(`📜 Profil de ${user.username}`)
         .addFields(
           { name: '🔢 Niveau', value: `Niv ${player.level}`, inline: true },
           { name: '💠 XP', value: `${player.xp} XP`, inline: true },
-          { name: '⚒️ Métiers', value: roles }
+          { name: '🛠 Métiers', value: metiers }
         );
       return interaction.reply({ embeds: [e] });
     }
 
-    // ---------------- COMMANDE METIER ----------------
+    // ---------------- DON XP ----------------
+    if (commandName === 'donxp') {
+      if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: '❌ Permission refusée.', flags: 64 });
+      }
+      await interaction.deferReply();
+      const tgt = interaction.options.getUser('joueur');
+      const xpAmt = interaction.options.getInteger('xp');
+      if (!userData[tgt.id]) userData[tgt.id] = { xp: 0, level: 1, progress: 0, validated: false, metiers: [] };
+      userData[tgt.id].xp += xpAmt;
+      await saveUserData(tgt.id, userData[tgt.id]);
+      return interaction.editReply(`✅ ${xpAmt} XP donnés à <@${tgt.id}> !`);
+    }
+
+    // ---------------- METIER ----------------
     if (commandName === 'metier') {
-      const row = new ActionRowBuilder()
-        .addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('choix_metier')
-            .setPlaceholder('Sélectionne ton métier')
-            .addOptions([
-              { label: 'Forgeron', value: 'Forgeron', emoji: '⚒️' },
-              { label: 'Mineur', value: 'Mineur', emoji: '⛏️' },
-              { label: 'Alchimiste', value: 'Alchimiste', emoji: '🧪' },
-              { label: 'Couturier', value: 'Couturier', emoji: '🧵' },
-              { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
-              { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
-              { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
-              { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
-            ])
-        );
-      await interaction.reply({ content: '🔽 Choisis ton métier :', components: [row], ephemeral: true });
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('choix_metier')
+          .setPlaceholder('Sélectionne ton métier')
+          .addOptions([
+            { label: 'Forgeron', value: 'Forgeron', emoji: '⚒️' },
+            { label: 'Mineur', value: 'Mineur', emoji: '⛏️' },
+            { label: 'Alchimiste', value: 'Alchimiste', emoji: '🧪' },
+            { label: 'Couturier', value: 'Couturier', emoji: '🧵' },
+            { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
+            { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
+            { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
+            { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
+          ])
+      );
+
+      return interaction.reply({ content: '🔽 Choisis ton métier :', components: [row], ephemeral: true });
     }
 
-    // ---------------- COMMANDE REQUETE ----------------
+    // ---------------- REQUETE ----------------
     if (commandName === 'requete') {
-      const row = new ActionRowBuilder()
-        .addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('requete_metier')
-            .setPlaceholder('Sélectionne le métier à contacter')
-            .addOptions([
-              { label: 'Forgeron', value: 'Forgeron', emoji: '⚒️' },
-              { label: 'Mineur', value: 'Mineur', emoji: '⛏️' },
-              { label: 'Alchimiste', value: 'Alchimiste', emoji: '🧪' },
-              { label: 'Couturier', value: 'Couturier', emoji: '🧵' },
-              { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
-              { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
-              { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
-              { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
-            ])
-        );
-      await interaction.reply({ content: '🔽 Sélectionne le métier à contacter :', components: [row], ephemeral: true });
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('choix_metier_requete')
+          .setPlaceholder('Choisis le métier pour ta requête')
+          .addOptions([
+            { label: 'Forgeron', value: 'Forgeron', emoji: '⚒️' },
+            { label: 'Mineur', value: 'Mineur', emoji: '⛏️' },
+            { label: 'Alchimiste', value: 'Alchimiste', emoji: '🧪' },
+            { label: 'Couturier', value: 'Couturier', emoji: '🧵' },
+            { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
+            { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
+            { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
+            { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
+          ])
+      );
+
+      return interaction.reply({ content: '🔽 Sélectionne le métier pour ta requête :', components: [row], ephemeral: true });
     }
 
-    // ---------------- GESTION DES MENUS SELECT ----------------
+    // ---------------- SELECT MENU ----------------
     if (interaction.isStringSelectMenu()) {
-      const metier = interaction.values[0];
-      const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
-
-      if (!role) return interaction.reply({ content: `❌ Le rôle ${metier} n'existe pas.`, ephemeral: true });
-
       if (interaction.customId === 'choix_metier') {
-        // Ajout métier au membre
+        const metier = interaction.values[0];
+        const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
+        if (!role) return interaction.reply({ content: `❌ Rôle ${metier} introuvable.`, ephemeral: true });
+
         await interaction.member.roles.add(role);
+        if (!player.metiers.includes(metier)) player.metiers.push(metier);
 
         // Message public
         const publicChannel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
         if (publicChannel) publicChannel.send(`🎉 **${interaction.user.username}** a rejoint la guilde des **${metier}** !`);
 
-        // Message privé
-        await interaction.user.send(
-          `✅ Merci d'avoir rejoint la guilde des **${metier}** !\n💡 Pour envoyer des requêtes, utilise /requete.`
-        );
+        // DM utilisateur
+        await interaction.user.send(`✅ Tu as rejoint la guilde des **${metier}** !`);
 
         return interaction.reply({ content: `✅ Tu es maintenant **${metier}** !`, ephemeral: true });
       }
 
-      if (interaction.customId === 'requete_metier') {
-        // Répondre immédiatement pour éviter échec
-        await interaction.reply({ content: `✅ Ta requête a été envoyée à la guilde des ${metier}.`, ephemeral: true });
+      if (interaction.customId === 'choix_metier_requete') {
+        const metier = interaction.values[0];
+        const modal = new ModalBuilder()
+          .setCustomId(`modal_objet_${metier}`)
+          .setTitle(`Requête pour ${metier}`);
 
-        // DM aux membres du rôle
-        role.members.forEach(m => {
-          m.send(`📢 ${interaction.user.username} a envoyé une requête à la guilde des ${metier} !`).catch(() => {});
-        });
+        const input = new TextInputBuilder()
+          .setCustomId('objet')
+          .setLabel('Nom de l’objet')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('Ex : Épée légendaire de la tempête')
+          .setRequired(true);
 
-        // Message public
-        const publicChannel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
-        if (publicChannel) {
-          publicChannel.send(`📢 ${interaction.user.username} a envoyé une requête à la guilde des ${metier} !`);
-        }
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return interaction.showModal(modal);
       }
+    }
+
+    // ---------------- MODAL SUBMIT ----------------
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_objet_')) {
+      const metier = interaction.customId.split('_')[2];
+      const objet = interaction.fields.getTextInputValue('objet');
+
+      // Recherche sur Wowhead
+      const searchUrl = `https://www.wowhead.com/search?q=${encodeURIComponent(objet)}`;
+      const res = await fetch(searchUrl);
+      const text = await res.text();
+      const $ = cheerio.load(text);
+
+      const firstItem = $('.listview-cleartext').first();
+      if (!firstItem.length) return interaction.reply({ content: `❌ Objet "${objet}" introuvable sur Wowhead.`, ephemeral: true });
+
+      const itemName = firstItem.text();
+      const itemLink = 'https://www.wowhead.com' + firstItem.attr('href');
+      const iconUrl = firstItem.closest('tr').find('img').attr('src') || 'https://wow.zamimg.com/images/wow/icons/large/inv_misc_questionmark.jpg';
+
+      const embed = new EmbedBuilder()
+        .setTitle(`Nouvelle requête !`)
+        .setColor(0x1abc9c)
+        .setDescription(`👤 Joueur : ${interaction.user.username}\n🛠 Métier : ${metier}\n⚔ Objet : [${itemName}](${itemLink})`)
+        .setThumbnail(iconUrl);
+
+      // Envoi dans le canal métier
+      const channel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === metier.toLowerCase() && c.isTextBased());
+      if (channel) channel.send({ embeds: [embed] });
+
+      // DM utilisateur
+      await interaction.user.send({ content: '✅ Ta requête a été envoyée !', embeds: [embed] });
+
+      return interaction.reply({ content: '✅ Requête envoyée !', ephemeral: true });
     }
 
   } catch (err) {
     console.error(err);
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply('❌ Une erreur est survenue.');
-    } else {
-      await interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
-    }
+    if (interaction.deferred || interaction.replied) await interaction.editReply('❌ Une erreur est survenue.');
+    else await interaction.reply({ content: '❌ Une erreur est survenue.', flags: 64 });
   }
 });
 
