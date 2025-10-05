@@ -92,7 +92,7 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  const { commandName, user, member } = interaction;
+  const { commandName, user } = interaction;
 
   if (!userData[user.id]) {
     userData[user.id] = { xp: 0, level: 1, progress: 0, validated: false, metiers: [] };
@@ -183,7 +183,6 @@ client.on('interactionCreate', async interaction => {
       const metier = interaction.customId.replace('modal_objet_', '');
       const objet = interaction.fields.getTextInputValue('objet');
 
-      // Embed violet style WoW épique + bouton accepter
       const embed = new EmbedBuilder()
         .setColor(0xa335ee)
         .setTitle(`🔮 ${objet}`)
@@ -198,11 +197,9 @@ client.on('interactionCreate', async interaction => {
 
       const rowButton = new ActionRowBuilder().addComponents(bouton);
 
-      // Envoi dans le canal métiers
       const channel = interaction.guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
       if (channel) channel.send({ embeds: [embed], components: [rowButton] });
 
-      // MP aux membres du rôle
       const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
       if (role) role.members.forEach(m => m.send({ embeds: [embed] }).catch(() => {}));
 
@@ -223,17 +220,60 @@ client.on('interactionCreate', async interaction => {
       }
 
       const requester = await client.users.fetch(requesterId);
+
+      // MP à la personne qui a fait la requête
       if (requester) {
         requester.send(`🛠 **${interaction.user.username}** a accepté ta requête pour **${metier}**, le craft est en cours !`).catch(() => {});
       }
 
-      interaction.reply({ content: `✅ Tu as accepté la requête de ${requester.username} !`, ephemeral: true });
+      // MP à l'artisan avec bouton "Terminer la commande"
+      const finishButton = new ButtonBuilder()
+        .setCustomId(`terminer_${metier}_${requesterId}_${interaction.user.id}`)
+        .setLabel('✅ Terminer la commande')
+        .setStyle(ButtonStyle.Success);
 
-      // Désactiver le bouton
+      const finishRow = new ActionRowBuilder().addComponents(finishButton);
+
+      await interaction.user.send({
+        content: `📦 Tu as accepté la requête de **${requester.username}** pour le métier **${metier}**.\nClique sur le bouton ci-dessous une fois la commande terminée :`,
+        components: [finishRow]
+      }).catch(() => {});
+
+      await interaction.reply({ content: `✅ Tu as accepté la requête de ${requester.username} ! Un message t’a été envoyé pour la suite.`, ephemeral: true });
+
+      // Désactiver le bouton dans le salon
       const newRow = new ActionRowBuilder().addComponents(
         ButtonBuilder.from(interaction.message.components[0].components[0]).setDisabled(true)
       );
       await interaction.message.edit({ components: [newRow] });
+    }
+
+    // ---------------- BOUTON TERMINER ----------------
+    if (interaction.isButton() && interaction.customId.startsWith('terminer_')) {
+      const [ , metier, requesterId, artisanId ] = interaction.customId.split('_');
+
+      if (interaction.user.id !== artisanId) {
+        return interaction.reply({ content: '❌ Seul l’artisan qui a accepté cette commande peut la terminer.', ephemeral: true });
+      }
+
+      const requester = await client.users.fetch(requesterId);
+      const guild = client.guilds.cache.first();
+      const metierChannel = guild.channels.cache.find(c => c.name === 'metiers' && c.isTextBased());
+
+      if (requester) {
+        requester.send(`🎉 Ta commande pour **${metier}** a été terminée par **${interaction.user.username}** !`).catch(() => {});
+      }
+
+      if (metierChannel) {
+        metierChannel.send(`✅ **${interaction.user.username}** a terminé la commande pour **${requester.username}** en tant que **${metier}** !`);
+      }
+
+      await interaction.reply({ content: '✅ Tu as confirmé la fin de la commande. Bien joué !', ephemeral: true });
+
+      const newRow = new ActionRowBuilder().addComponents(
+        ButtonBuilder.from(interaction.component).setDisabled(true)
+      );
+      await interaction.message.edit({ components: [newRow] }).catch(() => {});
     }
 
   } catch (err) {
@@ -244,3 +284,4 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.TOKEN);
+
