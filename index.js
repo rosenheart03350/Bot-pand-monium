@@ -113,7 +113,7 @@ client.on('interactionCreate', async interaction => {
             { label: 'Alchimiste', value: 'Alchimiste', emoji: '🧪' },
             { label: 'Couturier', value: 'Couturier', emoji: '🧵' },
             { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
-            { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
+            { label: 'Enchantement', value: 'Enchantement', emoji: '✨' },
             { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
             { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
           ])
@@ -284,4 +284,5 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.TOKEN);
+
 
