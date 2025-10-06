@@ -116,7 +116,8 @@ client.on('interactionCreate', async interaction => {
             { label: 'Enchantement', value: 'Enchantement', emoji: '✨' },
             { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
             { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' },
-            { label: 'Joaillier', value: 'Joaillier', emoji: '💎' }
+            { label: 'Joaillier', value: 'Joaillier', emoji: '💎' },
+            { label: 'Calligraphe', value: 'Calligraphe', emoji: '🪶' } // ✅ Ajout
           ])
       );
 
@@ -137,7 +138,8 @@ client.on('interactionCreate', async interaction => {
             { label: 'Ingénieur', value: 'Ingénieur', emoji: '🔧' },
             { label: 'Enchanteur', value: 'Enchanteur', emoji: '✨' },
             { label: 'Herboriste', value: 'Herboriste', emoji: '🌿' },
-            { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' }
+            { label: 'Travailleur du cuir', value: 'Travailleur du cuir', emoji: '👞' },
+            { label: 'Calligraphe', value: 'Calligraphe', emoji: '📜' } // ✅ Ajout
           ])
       );
 
@@ -148,8 +150,16 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === 'choix_metier') {
         const metier = interaction.values[0];
-        const role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
-        if (!role) return interaction.reply({ content: `❌ Rôle ${metier} introuvable.`, ephemeral: true });
+        let role = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === metier.toLowerCase());
+
+        // ✅ Création automatique du rôle si inexistant
+        if (!role) {
+          role = await interaction.guild.roles.create({
+            name: metier,
+            color: 'Random',
+            reason: 'Création automatique du rôle métier'
+          });
+        }
 
         await interaction.member.roles.add(role);
         if (!player.metiers.includes(metier)) player.metiers.push(metier);
@@ -285,7 +295,3 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.login(process.env.TOKEN);
-
-
-
-
